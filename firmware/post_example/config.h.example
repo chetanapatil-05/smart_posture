@@ -1,0 +1,25 @@
+// firmware/config.h.example
+// Copy this file to firmware/config.h and fill in your network and device credentials.
+// firmware/config.h is excluded from git to keep credentials safe.
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// Wi-Fi Credentials
+#define WIFI_SSID       "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
+
+// Cloud Ingest Endpoint & Device Credentials
+#define INGEST_URL      "https://<project-ref>.supabase.co/functions/v1/ingest"
+#define DEVICE_KEY      "YOUR_ESP32_SECRET_KEY"
+#define DEVICE_ID       "00000000-0000-0000-0000-000000000001"
+
+// Posture Thresholds (degrees deviation from baseline)
+#define WARN_DEG        15.0
+#define BAD_DEG         25.0
+
+// Alert Escalation Delays (seconds)
+#define ALERT_DELAY_VIBRATION_S 10
+#define ALERT_DELAY_BUZZER_S    10
+
+#endif // CONFIG_H

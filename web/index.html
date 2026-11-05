@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="SmartPosture AI - Minimal posture monitoring dashboard for ESP32 wearables with real-time feedback and intelligent fatigue index." />
+    <title>SmartPosture AI - Wearable Dashboard</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- 1. Header -->
+    <header class="app-header" id="app-header">
+      <div class="container header-content">
+        <div class="device-info">
+          <h1 class="app-title">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent);">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <polyline points="16 11 18 13 22 9"></polyline>
+            </svg>
+            SmartPosture AI
+          </h1>
+          <span class="device-name" id="device-name-display">ESP32 Wearable</span>
+        </div>
+
+        <div class="header-meta">
+          <span class="badge badge-offline" id="status-badge">
+            <span class="pulse-dot"></span>
+            <span id="status-text">Waiting for device</span>
+          </span>
+          <span class="badge badge-battery" id="battery-badge" style="display: none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="1" y="6" width="18" height="12" rx="2" ry="2"></rect>
+              <line x1="23" y1="11" x2="23" y2="13"></line>
+            </svg>
+            <span id="battery-text">--%</span>
+          </span>
+          <button id="theme-toggle-btn" class="btn" title="Toggle Light/Dark Theme" style="padding: 0.3rem 0.55rem;">
+            🌓
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="container" id="main-content">
+      <!-- Supabase Auth Bar (compact) -->
+      <section class="auth-banner" id="auth-section">
+        <div id="auth-user-info">
+          <span id="auth-status-text">Not authenticated</span>
+        </div>
+        <div class="auth-form" id="auth-controls">
+          <input type="email" id="auth-email-input" class="setting-input" placeholder="Enter email to sign in" style="width: 200px; padding: 0.35rem 0.6rem;" />
+          <button id="auth-submit-btn" class="btn btn-primary" style="padding: 0.35rem 0.75rem;">Sign In</button>
+        </div>
+      </section>
+
+      <!-- Setup Guidance Screen (shown before first reading arrives) -->
+      <section class="card setup-card" id="setup-card" style="display: none;">
+        <div class="card-title">Device Onboarding</div>
+        <div class="setup-checklist">
+          <h3>Waiting for your device…</h3>
+          <ol>
+            <li><strong>Power on</strong> your ESP32 posture wearable.</li>
+            <li>Sit upright in healthy alignment and <strong>press the button</strong> (GPIO 27) to calibrate your baseline angle.</li>
+            <li>Confirm the onboard <strong>RGB LED illuminates Blue</strong> during Wi-Fi transmission.</li>
+            <li>Real-time telemetry and fatigue analytics will populate this dashboard automatically.</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 2. Live Status Card (Realtime) -->
+      <section class="card live-card" id="live-card">
+        <div class="card-title">
+          <span>Live Posture Status</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;" id="live-sync-indicator">
+            Connecting...
+          </span>
+        </div>
+        <div class="live-grid">
+          <div class="live-badge-box">
+            <span class="metric-label">Current Posture</span>
+            <div class="state-badge-large" id="live-state-badge">NO DATA</div>
+          </div>
+          <div>
+            <span class="metric-label">Back Angle</span>
+            <div class="metric-value-lg" id="live-angle-display">--</div>
+            <div class="metric-diff" id="live-baseline-diff">Waiting for device readings</div>
+          </div>
+          <div>
+            <span class="metric-label">Time in State</span>
+            <div class="metric-value-lg" id="live-state-timer">--:--</div>
+            <div class="metric-diff">Continuous duration</div>
+          </div>
+          <div>
+            <span class="metric-label">Last Calibration</span>
+            <div style="font-size: 0.95rem; font-weight: 600; margin-top: 0.2rem;" id="live-last-calibrated">Not calibrated, press the device button</div>
+            <div class="metric-diff">Hardware button on GPIO 27</div>
+          </div>
+        </div>
+        <div id="offline-callout" class="offline-notice" style="display: none;"></div>
+        <div class="card-footnote" id="live-card-footnote">
+          <span>Data source: Hardware MPU6050</span>
+          <span id="live-last-reading-time">No reading received yet</span>
+        </div>
+      </section>
+
+      <!-- 3. KPI Row -->
+      <section class="kpi-row" id="kpi-section">
+        <div class="kpi-card">
+          <div class="kpi-header">Posture Score</div>
+          <div class="kpi-num" id="kpi-score">--</div>
+          <div class="kpi-subtext" id="kpi-score-sub">Needs ≥ 15 min of readings</div>
+          <div class="card-footnote">
+            <span id="kpi-score-footnote">Computed from 0 readings</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Posture Fatigue Index</div>
+          <div><span class="pfi-tag" id="kpi-pfi-tag">No data</span></div>
+          <div class="kpi-subtext" id="kpi-pfi-reason">Not enough data yet (needs 15 min of readings)</div>
+          <div class="card-footnote">
+            <span>PFI algorithm</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Today's Alerts</div>
+          <div class="kpi-num" id="kpi-alerts">--</div>
+          <div class="kpi-subtext">Vibration & buzzer triggers</div>
+          <div class="card-footnote">
+            <span>Device reported alerts</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Avg Recovery Time</div>
+          <div class="kpi-num" id="kpi-recovery">--</div>
+          <div class="kpi-subtext">Time to resume upright posture</div>
+          <div class="card-footnote">
+            <span>Alert duration delta</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Today's Timeline -->
+      <section class="card" id="timeline-section">
+        <div class="card-title">
+          <span>Today's Hourly Timeline</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: none;">Stacked minutes per hour (grey = no data gaps)</span>
+        </div>
+        <div class="chart-container" id="timeline-chart-container">
+          <div id="timeline-empty-state" class="empty-state" style="display: none; padding-top: 5rem;">
+            No posture telemetry recorded today yet.
+          </div>
+          <canvas id="timeline-chart"></canvas>
+        </div>
+        <div class="card-footnote">
+          <span id="timeline-footnote">Data source: Stored posture readings</span>
+        </div>
+      </section>
+
+      <!-- 5. Weekly Trend -->
+      <section class="card" id="weekly-section">
+        <div class="card-title">
+          <span>7-Day Trend Analysis</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: none;">Score Line & Alert Bars</span>
+        </div>
+        <div class="chart-container" id="weekly-chart-container">
+          <div id="weekly-empty-state" class="empty-state" style="display: none; padding-top: 5rem;">
+            No daily summary statistics available yet.
+          </div>
+          <canvas id="weekly-chart"></canvas>
+        </div>
+        <div class="card-footnote">
+          <span id="weekly-footnote">Data source: daily_stats table</span>
+        </div>
+      </section>
+
+      <!-- 6. Alerts List -->
+      <section class="card" id="alerts-section">
+        <div class="alerts-filter-bar">
+          <div class="card-title" style="margin-bottom: 0;">Alert Log</div>
+          <select id="alerts-day-filter" class="select-input">
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week" selected>Last 7 Days</option>
+          </select>
+        </div>
+        <div class="alerts-table-wrapper">
+          <table class="alerts-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Level</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Recovery</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-tbody">
+              <tr>
+                <td colspan="5" class="empty-state">No alerts recorded by device.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footnote">
+          <span id="alerts-footnote">Hardware vibration motor & buzzer events</span>
+        </div>
+      </section>
+
+      <!-- 7. Insights & Suggestions -->
+      <section class="card" id="insights-section">
+        <div class="card-title">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span>Insights & Recommendations</span>
+            <span class="badge" id="insights-source-tag" style="display: none;">
+              Gemini AI
+            </span>
+          </div>
+          <button id="refresh-insights-btn" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+            </svg>
+            <span id="refresh-btn-text">Refresh Insights</span>
+          </button>
+        </div>
+
+        <div class="insights-summary-box" id="insights-summary-box">
+          <div class="insights-summary-text" id="insights-summary-text">
+            Not enough data for AI insights yet. Requires at least 1 day of posture data.
+          </div>
+          <div class="insights-fatigue-text" id="insights-fatigue-text" style="display: none;">
+          </div>
+        </div>
+
+        <div class="suggestions-grid" id="suggestions-grid">
+          <div class="empty-state">No recommendations triggered by current data.</div>
+        </div>
+        <div class="card-footnote">
+          <span id="insights-footnote">Insights generated only from verified stored metrics</span>
+        </div>
+      </section>
+
+      <!-- 8. Settings -->
+      <section class="card" id="settings-section">
+        <div class="card-title">Device & Dashboard Settings</div>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label for="setting-baseline">Baseline Angle (Calibrated)</label>
+            <input type="text" id="setting-baseline" class="setting-input" value="Not calibrated, press the device button" readonly />
+          </div>
+          <div class="setting-item">
+            <label for="setting-warn-deg">Warning Threshold (°)</label>
+            <input type="number" id="setting-warn-deg" class="setting-input" value="15" min="5" max="30" />
+          </div>
+          <div class="setting-item">
+            <label for="setting-bad-deg">Bad Posture Threshold (°)</label>
+            <input type="number" id="setting-bad-deg" class="setting-input" value="25" min="15" max="50" />
+          </div>
+          <div class="setting-item">
+            <label for="setting-alert-delay">Alert Delay (s)</label>
+            <input type="number" id="setting-alert-delay" class="setting-input" value="10" min="3" max="60" />
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button id="save-settings-btn" class="btn btn-primary">Save Thresholds</button>
+          <button id="export-csv-btn" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export Telemetry CSV
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="medical-disclaimer">Disclaimer: Not medical advice. For ergonomic awareness and posture monitoring only.</div>
+      <div>SmartPosture AI &copy; 2026. ESP32 Wearable Posture System. Real hardware data only.</div>
+    </footer>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

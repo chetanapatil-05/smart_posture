@@ -1,0 +1,20 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Hardware config
+config.h
+firmware/config.h
+
+# Node dependencies and build
+node_modules/
+dist/
+.vite/
+
+# System and IDE
+.DS_Store
+Thumbs.db
+*.log
+.temp/
+supabase/.temp/

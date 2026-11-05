@@ -1,0 +1,17 @@
+{
+  "name": "smartposture-web",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "chart.js": "^4.4.8"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "_comment": "OPTIONAL DEV-ONLY DOCUMENTATION REFERENCE. NEVER LOADED BY FRONTEND OR INSERTED INTO DB.",
+  "device_id": "00000000-0000-0000-0000-000000000001",
+  "battery_pct": 76,
+  "baseline_angle": 8.0,
+  "buffered": false,
+  "readings": [
+    {
+      "ts": "2026-10-22T12:00:00Z",
+      "angle": 7.2,
+      "state": "good",
+      "movement": 0.25
+    }
+  ],
+  "alerts": [
+    {
+      "ts": "2026-10-22T12:00:10Z",
+      "level": "vibration",
+      "duration_s": 10,
+      "reason": "forward_lean",
+      "recovery_time_s": 18
+    }
+  ],
+  "events": [
+    {
+      "ts": "2026-10-22T12:00:00Z",
+      "type": "calibration",
+      "angle": 8.0
+    }
+  ]
+}
