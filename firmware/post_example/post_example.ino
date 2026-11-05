@@ -307,8 +307,9 @@ void updateOLED() {
   display.drawLine(0, 36, 127, 36, SSD1306_WHITE);
   display.setTextSize(1);
   display.setCursor(0, 41);
-  float diff = abs(currentAngle - baselineAngle);
+  float diff = currentAngle - baselineAngle;
   display.print("Diff:");
+  if (diff > 0) display.print("+");
   display.print(diff, 1);
   display.print((char)247);
   display.print(" Base:");
@@ -543,23 +544,24 @@ void loop() {
 
   // 2. Sample IMU Tilt Angle & Movement
   readMPU6050(currentAngle, movementLevel);
-  float diff = abs(currentAngle - baselineAngle);
+  float delta = currentAngle - baselineAngle; // Signed deviation from upright baseline
+  float diff = abs(delta);                    // Magnitude
 
-  // 3. Posture State Classification & Alert Escalation (with 10-second Persistence Filter)
-  if (diff >= BAD_DEG) {
+  // 3. Posture State Classification (-10.0° to +15.0° is the PERFECT GOOD posture window!)
+  if (delta >= BAD_DEG || delta <= BAD_BACK_DEG) {
     currentState = "bad";
-  } else if (diff >= WARN_DEG) {
+  } else if (delta > GOOD_MAX_DEG || delta < GOOD_MIN_DEG) {
     currentState = "warning";
   } else {
-    currentState = "good";
+    currentState = "good"; // Natural upright posture between -10.0° and +15.0°
   }
 
   // Update 3 status LEDs: Red (Bad), Green (Good), Yellow (Device ON)
   updateLEDs(currentState);
 
   // Only trigger vibration/buzzer if poor posture (Warning or Bad) persists for >= 10 seconds.
-  // Momentary posture shifts (1-9s) cause ZERO sound or vibration!
-  if (diff >= WARN_DEG) {
+  // Momentary posture shifts cause ZERO sound or vibration!
+  if (currentState != "good") {
     if (poorPostureStartMs == 0) {
       poorPostureStartMs = nowMs; // Start tracking duration in poor posture
     }
@@ -577,7 +579,7 @@ void loop() {
     }
 
     // If posture is BAD and persists for another 5 seconds (total 15s) -> trigger Buzzer
-    if (diff >= BAD_DEG && poorDurationS >= (ALERT_DELAY_VIBRATION_S + 5) && !buzzerActive) {
+    if (currentState == "bad" && poorDurationS >= (ALERT_DELAY_VIBRATION_S + 5) && !buzzerActive) {
       buzzerActive = true;
       digitalWrite(PIN_BUZZER, HIGH);
       Serial.println("[ALERT] Sustained BAD posture -> Buzzer ON");
