@@ -132,14 +132,21 @@ void updateLEDs(String state) {
   }
 }
 
-// Get ISO 8601 Timestamp String
-void getIsoTimestamp(char* buffer, size_t maxLen) {
+// Check if real clock time is synced from NTP
+bool isTimeSynced() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    snprintf(buffer, maxLen, "2026-10-22T12:00:00Z");
-    return;
+  if (!getLocalTime(&timeinfo, 100)) return false;
+  return (timeinfo.tm_year >= (2026 - 1900));
+}
+
+// Get ISO 8601 Timestamp String (only returns real time, no fake fallback)
+bool getIsoTimestamp(char* buffer, size_t maxLen) {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 100) || timeinfo.tm_year < (2026 - 1900)) {
+    return false;
   }
   strftime(buffer, maxLen, "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+  return true;
 }
 
 // Read Battery Percentage from GPIO 34 (100k/100k divider)
@@ -348,8 +355,7 @@ void calibrateBaseline() {
   showCalibrationOLED(baselineAngle);
 
   char ts[25];
-  getIsoTimestamp(ts, sizeof(ts));
-  if (eventsCount < 5) {
+  if (getIsoTimestamp(ts, sizeof(ts)) && eventsCount < 5) {
     strncpy(eventsBuffer[eventsCount].ts, ts, sizeof(eventsBuffer[eventsCount].ts));
     strncpy(eventsBuffer[eventsCount].type, "calibration", sizeof(eventsBuffer[eventsCount].type));
     eventsBuffer[eventsCount].angle = baselineAngle;
@@ -370,6 +376,17 @@ void calibrateBaseline() {
 void postTelemetry() {
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.reconnect();
+    return;
+  }
+
+  // Ensure clock time is synced before transmitting to cloud
+  if (!isTimeSynced()) {
+    static unsigned long lastNtpNotice = 0;
+    if (millis() - lastNtpNotice > 3000) {
+      lastNtpNotice = millis();
+      Serial.println("[NTP] Syncing clock from time.google.com before sending...");
+      configTime(0, 0, "time.google.com", "time.cloudflare.com", "pool.ntp.org");
+    }
     return;
   }
 
@@ -499,20 +516,27 @@ void setup() {
     Serial.println("[WiFi] FAILED to connect after 20 attempts!");
   }
 
-  // Sync NTP Time
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  Serial.println("[NTP] Time sync requested from pool.ntp.org");
+  // Sync NTP Time using Google & Cloudflare & pool.ntp.org (fast & reliable over cellular hotspots)
+  configTime(gmtOffset_sec, daylightOffset_sec, "time.google.com", "time.cloudflare.com", "pool.ntp.org");
+  Serial.print("[NTP] Syncing clock time from time.google.com");
 
-  // Wait briefly for NTP
-  delay(1500);
+  // Actively wait up to 6 seconds for NTP response
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
-    char timeBuf[25];
-    strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &timeinfo);
-    Serial.print("[NTP] Current time: ");
+  int ntpWait = 0;
+  while (!getLocalTime(&timeinfo, 500) && ntpWait < 12) {
+    delay(500);
+    Serial.print(".");
+    ntpWait++;
+  }
+  Serial.println();
+
+  if (isTimeSynced()) {
+    char timeBuf[30];
+    strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
+    Serial.print("[NTP] Clock successfully synced: ");
     Serial.println(timeBuf);
   } else {
-    Serial.println("[NTP] WARNING: Time not synced yet");
+    Serial.println("[NTP] WARNING: Clock not synced yet. Will continue syncing in background.");
   }
 
   // Calibrate initial upright posture
@@ -591,9 +615,8 @@ void loop() {
       digitalWrite(PIN_BUZZER, LOW);
 
       // Record alert resolution
-      if (alertsCount < 5) {
-        char ts[25];
-        getIsoTimestamp(ts, sizeof(ts));
+      char ts[25];
+      if (alertsCount < 5 && getIsoTimestamp(ts, sizeof(ts))) {
         strncpy(alertsBuffer[alertsCount].ts, ts, sizeof(alertsBuffer[alertsCount].ts));
         strncpy(alertsBuffer[alertsCount].level, buzzerActive ? "buzzer" : "vibration", sizeof(alertsBuffer[alertsCount].level));
         alertsBuffer[alertsCount].duration_s = (nowMs - alertStartMs) / 1000;
@@ -623,11 +646,12 @@ void loop() {
   if (nowMs - lastSampleMs >= 1000) {
     lastSampleMs = nowMs;
     if (readingsCount < MAX_BUFFER_SIZE) {
-      getIsoTimestamp(readingsBuffer[readingsCount].ts, sizeof(readingsBuffer[readingsCount].ts));
-      readingsBuffer[readingsCount].angle = currentAngle;
-      strncpy(readingsBuffer[readingsCount].state, currentState.c_str(), sizeof(readingsBuffer[readingsCount].state));
-      readingsBuffer[readingsCount].movement = movementLevel;
-      readingsCount++;
+      if (getIsoTimestamp(readingsBuffer[readingsCount].ts, sizeof(readingsBuffer[readingsCount].ts))) {
+        readingsBuffer[readingsCount].angle = currentAngle;
+        strncpy(readingsBuffer[readingsCount].state, currentState.c_str(), sizeof(readingsBuffer[readingsCount].state));
+        readingsBuffer[readingsCount].movement = movementLevel;
+        readingsCount++;
+      }
 
       // Print live reading every second
       Serial.print("[LIVE] angle:");
